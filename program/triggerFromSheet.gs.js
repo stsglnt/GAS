@@ -829,7 +829,7 @@ function trigger_SaveEmails_sheet(e) {
 				saveatt = rules_array[i].savefiles;
 				threads = GmailApp.search(filter + " -label:" + archiveName, 0, batchsize);
 
-				if (folder && threads.length) {
+				if (folder && threads.length && rules_array[i].isactive) {
 					writeLog_("[Rule] " + filter + " [" + threads.length + " threads]");
 
 					for (var x = 0; x < threads.length; x++) {
