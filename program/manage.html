@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<!-- Manage Rules - запуск/удаление выбраного правила скрипта -->
+<head>
+
+  <link rel="stylesheet" href="https://ssl.gstatic.com/docs/script/css/add-ons1.css">
+
+  <script>
+   /*
+    * вывод уведомления
+    */
+    function showMessage(e) {
+      document.getElementById("message").innerHTML = e;
+    }
+
+   /*
+    * вывод уведомления
+    * @param e {object}
+    */
+	 function onFailure(e) {
+		 showProgress(e.message);
+	 }
+
+   /*
+    * вывод уведомления
+    * @param e {object}
+    */
+	 function showProgress(e) {
+		 showMessage(e);
+		 ruleChanged({value: "F"});
+	 }
+
+    /*
+     * Удаление выбраного правила/скрипта
+     */
+    function doDeleteRule() {
+
+      ruleChanged({value: ""});
+      showMessage("<img src='https://i.imgur.com/b7BJ2nW.gif' /> Deleting rule, please wait..");
+
+      google.script.run.withFailureHandler(onFailure).withSuccessHandler(closeWindow).deleteRule(document.getElementById("rule").value);
+
+    }
+
+	 /*
+		* старт выбраного правила
+		*/
+		function doRunRule() {
+
+      ruleChanged({value: ""});
+      showMessage("<img src='https://i.imgur.com/b7BJ2nW.gif' /> Processing rule, it may take a minute or two to complete..");
+      /* runRule - из файла utils.gs */
+      google.script.run.withFailureHandler(onFailure).withSuccessHandler(showProgress).runRule(document.getElementById("rule").value);
+
+    }
+
+    /*
+     * Закрытие попап окна
+     */
+    function closeWindow() {
+      google.script.host.close();
+    }
+
+	 /*
+    * Проверка доступности кнопок
+    * Елемента нет - кнопка закрыта
+		* @param e {object}
+		*/
+	 function ruleChanged(e) {
+    
+      var btn = document.getElementById("btn-delete");
+      if (e.value === "")
+        btn.disabled = true; // кнопка закрыта
+      else
+        btn.disabled = false; // кнопка доступна
+        
+      btn = document.getElementById("btn-run");
+      if (e.value === "")
+        btn.disabled = true;
+      else
+        btn.disabled = false;
+        
+    }
+  </script>
+</head>
+
+<body>
+
+  <div class="block" id="form">
+    <select style="width:100%" id="rule" onchange="ruleChanged(this)">
+      <option value="" selected>Select a rule..</option>
+      <? for (var i=0; i < rules.length; i++) { ?>
+        <option value="<?= rules[i].ruleID; ?>">
+          <?= rules[i].rule; ?> (sent to <?= rules[i].savefolderName;?>)
+        </option>
+        <? } ?>
+    </select>
+  </div>
+  
+  <div class="form-group block" id="button-bar">
+  <span class="gray" id="message">Rules are processed every 15 minutes or run them manually here.</span>
+  </div>
+
+  <div class="form-group block" id="button-bar">
+    <button onclick="doRunRule()" disabled="true" class="blue" id="btn-run">Run</button>
+    <button onclick="doDeleteRule()" disabled="true" id="btn-delete">Delete</button>
+  </div>
+
+</body>
+
+</html>

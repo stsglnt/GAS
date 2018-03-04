@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html>
+<!-- Админ попап - создание нового правила -->
+<head>
+
+  <link rel="stylesheet" href="https://ssl.gstatic.com/docs/script/css/add-ons1.css">
+
+  <style>
+  
+    .col-contain {
+      overflow: hidden;
+    }
+
+    .col-one {
+      width: 30.5%;
+    }
+
+    .width-100 {
+      width: 100%;
+    }
+
+  </style>
+
+  <script>
+    /* Размеры окна */
+    var DIALOG_DIMENSIONS = {
+      width: 580,
+      height: 350
+    };
+    var pickerApiLoaded = false;
+
+    /*
+     * Запууск попап-окна
+     */
+    function onApiLoad() {
+      gapi.load('picker', {
+        'callback': function() {
+          pickerApiLoaded = true;
+        }
+      });
+    }
+
+    /*
+     * выбор дериктории для сохранения в гугл диске
+     */
+    function getOAuthToken() {
+      google.script.run.withSuccessHandler(createPicker)
+        .withFailureHandler(showFolderInputField).getOAuthToken();
+    }
+
+    /*
+     * err message
+     */
+    function showFolderInputField() {
+      showMessage("Unable to load File Picker, add the folder URL manually");
+    }
+
+    /*
+     * соединение 0_О ?
+     */
+    function createPicker(token) {
+
+      if (pickerApiLoaded && token) {
+
+        var docsView = new google.picker.DocsView()
+          .setMode(google.picker.DocsViewMode.GRID)
+          .setIncludeFolders(true)
+          .setMimeTypes('application/vnd.google-apps.folder')
+          .setSelectFolderEnabled(true);
+
+        var picker = new google.picker.PickerBuilder()
+          .enableFeature(google.picker.Feature.NAV_HIDDEN)
+          .addView(docsView)
+          .hideTitleBar()
+          .setOAuthToken(token)
+          .setCallback(pickerCallback)
+          .setOrigin('https://docs.google.com')
+          .setSize(DIALOG_DIMENSIONS.width - 2, DIALOG_DIMENSIONS.height - 2)
+          .build();
+
+        picker.setVisible(true);
+
+      } else {
+        showFolderInputField();
+      }
+    }
+
+    /*
+     * подтверждение удачного сохранения/соединения
+		 */
+    function pickerCallback(data) {
+      if (data[google.picker.Response.ACTION] == google.picker.Action.PICKED) {
+        var doc = data[google.picker.Response.DOCUMENTS][0];
+        document.getElementById('google-drive-folder-url').value = doc[google.picker.Document.URL];
+        document.getElementById('google-drive-folder-id').value = doc[google.picker.Document.ID];
+        document.getElementById('google-drive-folder-name').value = doc[google.picker.Document.NAME];
+        showMessage("Your emails will be saved in folder <a target='_blank' href='" + doc[google.picker.Document.URL] + "'>" + doc[google.picker.Document.NAME] + "</a>");
+      }
+    }
+
+		/*
+     * проверка отметкаи для сохранения вложений/мелов
+		 * @param e отметка
+		 */
+		function doAction(e) {
+      if (!e.checked) {
+        var id = (e.id !== "save-email") ? "save-email" : "save-attachments";
+        document.getElementById(id).checked = true;
+      }
+    }
+
+		/*
+		 * Вывод уведомления
+		 * @param e {string} текст уведомления
+		 */
+    function showMessage(e) {
+      document.getElementById("message").innerHTML = e;
+    }
+
+    /*
+     * Вывод сообщения об ошибке
+     * @param e {string} ошибка
+     */
+    function showErrorMessage(e) {
+      document.getElementById("message").innerHTML = '<span class="error">' + e + '</span>';
+    }
+
+		/*
+     * создание правила и запись
+		 */
+		function doCreateRule() {
+      var selectedExtensions = Array.prototype.slice.call(document.querySelectorAll('#extensions option:checked'),0).map(function(v,i,a) {
+          return v.value; 
+      });
+      var query = "";
+      if (selectedExtensions.length > 0) {
+        query = 'filename:' + selectedExtensions[0];
+        if (selectedExtensions.length > 1){
+          for(var i = 1; i < selectedExtensions.length; i++){
+             query += (' OR filename:'+selectedExtensions[i]);
+           }}
+          }
+          /* получаем значения форм */
+      var condition = {
+        folder: document.getElementById("folder").value,
+        from: document.getElementById("from").value,
+        to: document.getElementById("to").value,
+        bytes: document.getElementById("bytes").value,
+        words: document.getElementById("words").value,
+        nowords: document.getElementById("nowords").value,
+        subject: document.getElementById("subject").value,
+        before: document.getElementById("before").value,
+        after: document.getElementById("after").value,
+        extensions: query
+      };
+
+      var found = false;
+
+      for (var elems in condition) {
+        if (condition[elems] !== "") {
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        showErrorMessage("Select at least <b>one condition</b> above");
+        return;
+      }
+
+      var url = document.getElementById("google-drive-folder-url").value;
+      
+      if (url !== "") {
+      
+        var folderID = url.match(/[-\w]{25,}/);
+        
+        if (folderID) {
+          folderID = folderID[0];
+        } else {
+          folderID = url.match(/id=([-\w]{18,})/);
+          if (folderID) {
+            folderID = folderID[1];
+          }
+        }
+        
+        if (folderID) {
+         document.getElementById("google-drive-folder-id").value = folderID;
+        } else {
+         showErrorMessage("Please enter a valid Google Drive folder URL");         
+         return;
+        }        
+      }
+      
+      var action = {
+        saveemail: document.getElementById("save-email").checked,
+        savefiles: document.getElementById("save-attachments").checked,
+        savefolderID: document.getElementById("google-drive-folder-id").value,
+        savefolderName: document.getElementById("google-drive-folder-name").value,
+        isactive: document.getElementById("isactive").checked
+      };
+
+      if (action.savefolderID === "") {
+        showErrorMessage("Select a Google Drive folder to save your emails");
+        return;
+      }
+
+      var btn = document.getElementById("btn-save");
+
+      btn.disabled = true;
+
+      showMessage("<img src='https://i.imgur.com/b7BJ2nW.gif' /> Creating rule, please wait..");
+
+      var rule = writeCondition(condition);
+      action['rule'] = rule;
+      google.script.run.withFailureHandler(onFailure).withSuccessHandler(ruleCreated).saveRule({rule: rule, action: action});
+
+    }
+
+    /*
+     * включение/выключение кнопки
+     */
+    function enableSaveButton() {
+      var btn = document.getElementById("btn-save");
+      btn.disabled = false;
+      btn.innerText = "Create Rule";
+    }
+
+    /*
+     * вывод сообщения
+     * @param e текст сообщения
+     */
+    function onFailure(e) {
+      showMessage(e.message);
+      enableSaveButton();
+    }
+
+    /*
+     * Закрытие соединение 0_О ?
+		 * @param e не используется
+     */
+    function ruleCreated(e) {
+      google.script.host.close();
+    }
+
+    /*
+     * Выборка значений . . .
+     * @param select
+     */
+    function getSelectValues(select) {
+      var result = [];
+      var options = select && select.options;
+      var opt;
+    
+      for (var i=0, iLen=options.length; i<iLen; i++) {
+        opt = options[i];
+    
+        if (opt.selected) {
+          result.push(opt.value || opt.text);
+        }
+      }
+      return result;
+    }
+
+		/*
+     * проверка значение формы
+		 * @param {object} condition обьект значение формы
+		 * @returns {string} значение формы
+		 */
+    function writeCondition(condition) {
+
+      var stmt = [];
+
+      if (condition.folder !== "") {
+        stmt.push("label:" + condition.folder.replace(/[\/\s&]/g, "-"));
+      }
+
+      if (condition.from !== "") {
+        stmt.push("from:" + condition.from);
+      }
+
+      if (condition.to !== "") {
+        stmt.push("to:" + condition.to);
+      }
+
+      if (condition.bytes !== "") {
+        stmt.push("size:" + condition.bytes);
+      }
+
+      if (condition.after !== "") {
+        stmt.push("after:" + condition.after);
+      }
+      
+      if (condition.before !== "") {
+        stmt.push("before:" + condition.before);
+      }
+
+      if (condition.words !== "") {
+        stmt.push(condition.words);
+      }
+
+      if (condition.nowords !== "") {
+        stmt.push("-{" + condition.nowords + "}");
+      }
+
+      if (condition.subject !== "") {
+        stmt.push("subject:(" + condition.subject + ")");
+      }
+      if (condition.extensions !== "") {
+
+          stmt.push(condition.extensions);
+       
+      }
+
+      return stmt.join(" ");
+
+    }
+  </script>
+  
+</head>
+
+<body>
+    <b class="block">1. When all these conditions are met:</b>
+    <div class="block form-group">
+      <div class="inline form-group col-one">
+        <label for="select">Label:</label>
+        <select id="folder" style="width:100%">
+          <option value="" selected>Select Gmail Label..</option>
+          <? var all = getGmailLabels_(); for (var a in all) { ?>
+            <option value="<?= all[a]?>">
+              <?= all[a]; ?>
+            </option>
+            <? } ?>
+        </select>
+      </div>
+      <div class="inline form-group col-one">
+        <label for="from">From:</label>
+        <input type="email" id="from" style="width: 100%">
+      </div>
+      <div class="inline form-group col-one">
+        <label for="to">To:</label>
+        <input type="email" id="to" style="width: 100%">
+      </div>
+    </div>
+
+    <div class="block form-group">
+      <div class="inline form-group col-one">
+        <label for="bytes">Message Size:</label>
+        <select id="bytes" style="width:100%">
+          <option value="" selected>Any size</option>        
+          <? var data = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25];
+             for (var i = 0; i < data.length; i++) { ?>
+               <option value="<?= data[i] ?>MB"><?= data[i] ?> MB</option>
+          <? } ?>
+        </select>
+      </div>
+      <div class="inline form-group col-one">
+        <label for="to">Has the words:</label>
+        <input type="text" id="words" style="width: 100%">
+      </div>
+      <div class="inline form-group col-one">
+        <label for="to">Doesn't have:</label>
+        <input type="text" id="nowords" style="width: 100%">
+      </div>
+    </div>
+
+    <div class="block form-group">
+      <div class="inline form-group col-one">
+        <label for="subject">Subject:</label>
+        <input type="text" id="subject" style="width: 100%">
+      </div>
+      <div class="inline form-group col-one">
+        <label for="after">Received after:</label>
+        <input type="text" id="after" style="width: 100%" placeholder="yyyy/mm/dd">
+      </div>
+      <div class="inline form-group col-one">
+        <label for="after">Received before:</label>
+        <input type="text" id="before" style="width: 100%" placeholder="yyyy/mm/dd">
+      </div>
+    </div>
+
+    <div class="block form-group">
+      <div class="inline form-group col-one">
+        <label for="extensions">Extensions:</label>
+        <select id="extensions" style="width:100%" multiple>
+       
+          <? var data = ['jpg', 'tif', 'png', 'gif', 'bmp', 'svg', 'pdf', 'doc', 'docx'];
+             for (var i = 0; i < data.length; i++) { ?>
+             <option value="<?= data[i] ?>"><?= data[i] ?></option>
+          <? } ?>
+        </select>
+      </div>
+      <div class="inline form-group">
+        <input checked type="checkbox" id="isactive">
+        <label  for="isactive">Is Active</label>
+      </div>
+    </div>
+
+
+    <b class="block" style="padding-top:15px">2. Do the following:</b>
+    <div class="block form-group">
+      <div class="inline form-block">
+        <input checked onclick="doAction(this)" type="checkbox" id="save-email">
+        <label for="save-prefs">Save email (PDF)</label>
+      </div>
+      <div class="inline form-block">
+        <input checked onclick="doAction(this)" type="checkbox" id="save-attachments">
+        <label for="save-prefs">Save attachments</label>
+      </div>
+      <div class="inline form-block">
+        <input type="text" id="google-drive-folder-url" placeholder="Drive folder URL.." value="" style="width:154px">
+        <button id="btn-oauth" onclick='getOAuthToken()'>Select Folder</button>
+        <input type="hidden" id="google-drive-folder-id">
+        <input type="hidden" id="google-drive-folder-name">
+      </div>
+    </div>
+    
+  
+  <div class="form-group block" id="button-bar">
+    <button onclick="doCreateRule()" class="blue" id="btn-save">Create Rule</button>
+    <button onclick="google.script.host.close()" id="btn-manage">Cancel</button>
+    <span style="float:right;padding-top:5px" class="gray" id="message"></span>
+  </div>
+
+  <script src="https://apis.google.com/js/api.js?onload=onApiLoad"></script>
+</body>
+</html>
